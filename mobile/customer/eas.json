@@ -11,13 +11,13 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.kaarigargo.app/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://kaarigargo-api.onrender.com/api/v1"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.kaarigargo.app/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://kaarigargo-api.onrender.com/api/v1"
       }
     }
   },
