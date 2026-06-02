@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "KaarigarGo Pro",
+    "slug": "kaarigargo-worker",
+    "scheme": "kaarigargopro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#4338ca",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.kaarigargo.worker"
+    },
+    "android": {
+      "package": "app.kaarigargo.worker",
+      "adaptiveIcon": {
+        "backgroundColor": "#4338ca"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-asset",
+      "expo-font",
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "KaarigarGo Pro shares your live location with the customer while you're on the way to a job."
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:3000/api/v1"
+    }
+  }
+}
