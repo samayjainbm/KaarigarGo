@@ -1,0 +1,26 @@
+# Render Blueprint — one-click backend deploy.
+# In Render: New → Blueprint → connect this repo. Render reads this file, builds the
+# Dockerfile, and prompts for the two secrets marked `sync: false`.
+services:
+  - type: web
+    name: kaarigargo-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free # NOTE: free instances sleep after ~15 min idle (cold starts + socket drops).
+    region: singapore # closest to India/Supabase ap-south; change if you like
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # paste your Supabase connection string in the Render dashboard
+      - key: REDIS_URL
+        sync: false # paste your Upstash rediss:// URL in the Render dashboard
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TTL
+        value: "900"
+      - key: JWT_REFRESH_TTL
+        value: "2592000"
