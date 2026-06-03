@@ -33,7 +33,14 @@
       "expo-notifications"
     ],
     "extra": {
-      "apiUrl": "https://kaarigargo-api.onrender.com/api/v1"
-    }
+      "apiUrl": "https://kaarigargo-api.onrender.com/api/v1",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "dd82801b-ac1f-4344-9359-26e828f92578"
+      }
+    },
+    "owner": "samayjainbm"
   }
 }

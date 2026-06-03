@@ -19,7 +19,11 @@
       "package": "app.kaarigargo.worker",
       "adaptiveIcon": {
         "backgroundColor": "#4338ca"
-      }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -39,7 +43,14 @@
       ]
     ],
     "extra": {
-      "apiUrl": "https://kaarigargo-api.onrender.com/api/v1"
-    }
+      "apiUrl": "https://kaarigargo-api.onrender.com/api/v1",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "4e711256-b6ba-4c71-9a6a-6ce1e524c80d"
+      }
+    },
+    "owner": "samayjainbm"
   }
 }
