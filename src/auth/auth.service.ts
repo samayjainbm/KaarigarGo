@@ -22,18 +22,16 @@ export class AuthService {
     private readonly config: ConfigService,
   ) {}
 
-  private isDev(): boolean {
-    return this.config.get<string>('NODE_ENV') !== 'production';
-  }
-
   async requestOtp(phone: string) {
     const code = await this.otp.issue(phone);
     await this.sms.sendOtp(phone, code);
     return {
       sent: true,
       expiresInSec: 300,
-      // Dev convenience: surface the code so you can test without an SMS provider.
-      ...(this.isDev() ? { devOtp: code } : {}),
+      // Demo mode: no SMS provider is configured, so always surface the code in the
+      // response. The mobile app auto-fills it on the login screen. Replace SmsService
+      // with a real provider (and drop devOtp) before exposing this to real users.
+      devOtp: code,
     };
   }
 
