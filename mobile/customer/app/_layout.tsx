@@ -1,6 +1,8 @@
 import { AuthProvider, useAuth } from '@/auth';
 import { colors } from '@/theme';
 import { Loading } from '@/ui';
+import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -28,6 +30,9 @@ function Gate() {
 }
 
 export default function RootLayout() {
+  // Icon font is embedded natively (android/app/src/main/assets/fonts/Ionicons.ttf).
+  // Kick off a background load too, but never block the UI on it.
+  useFonts(Ionicons.font);
   return (
     <SafeAreaProvider>
       <AuthProvider>
