@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PaymentMethod } from '@prisma/client';
+import * as QRCode from 'qrcode';
 import { AuthUser } from '../auth/auth.types';
 import { SettlementService } from '../money/settlement.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -65,6 +66,82 @@ export class PaymentsService {
         ? { mockPayUrl: `/api/v1/payments/order/${order.providerOrderId}/mock-pay` }
         : {}),
     };
+  }
+
+  /**
+   * UPI QR: build a `upi://pay` intent for the booking amount and render it as a QR
+   * (PNG data-URI, generated server-side so clients need no QR library). Money goes to
+   * the platform VPA (UPI_VPA); settlement to the worker happens on confirm + completion.
+   */
+  async createUpiQr(user: AuthUser, bookingId: string) {
+    const b = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!b) throw new NotFoundException('Booking not found');
+    if (b.customerId !== user.id) throw new ForbiddenException('Not your booking');
+    if (b.paymentMode !== 'ONLINE') throw new BadRequestException('Booking is cash mode');
+    if (!PAYABLE_STATUSES.includes(b.status)) {
+      throw new ConflictException(`Booking not payable in state ${b.status}`);
+    }
+    if (await this.prisma.payment.findFirst({ where: { bookingId, status: 'PAID' } })) {
+      throw new ConflictException('Booking already paid');
+    }
+
+    const amount = b.finalPrice ?? b.priceEstimate ?? 0;
+    if (amount <= 0) throw new BadRequestException('Invalid amount');
+
+    // Reuse an open UPI order for this booking, otherwise mint one.
+    const existing = await this.prisma.payment.findFirst({
+      where: { bookingId, status: 'PENDING', providerOrderId: { startsWith: 'upiqr_' } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const orderId =
+      existing?.providerOrderId ?? `upiqr_${bookingId.slice(0, 8)}_${Date.now().toString(36)}`;
+    if (!existing) {
+      await this.prisma.payment.create({
+        data: { bookingId, provider: 'RAZORPAY', providerOrderId: orderId, amount, method: 'UPI', status: 'PENDING' },
+      });
+    }
+
+    const vpa = this.config.get<string>('UPI_VPA') ?? 'kaarigargo@upi';
+    const payeeName = this.config.get<string>('UPI_PAYEE_NAME') ?? 'KaarigarGo';
+    const amountRupees = (amount / 100).toFixed(2);
+    const note = `KaarigarGo ${b.id.slice(0, 8)}`;
+    const upiUri =
+      `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}` +
+      `&am=${amountRupees}&cu=INR&tn=${encodeURIComponent(note)}&tr=${encodeURIComponent(orderId)}`;
+    const qr = await QRCode.toDataURL(upiUri, { width: 320, margin: 1 });
+
+    return { orderId, amount, vpa, payeeName, upiUri, qr };
+  }
+
+  /**
+   * Confirm a UPI QR payment (no gateway to auto-verify, so either the customer
+   * — "I've paid" — or the assigned worker — "payment received" — marks it paid).
+   * Reuses the standard apply+settle path.
+   */
+  async confirmUpi(user: AuthUser, bookingId: string) {
+    const b = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { worker: true },
+    });
+    if (!b) throw new NotFoundException('Booking not found');
+    const isCustomer = b.customerId === user.id;
+    const isWorker = !!b.worker && b.worker.userId === user.id;
+    if (!isCustomer && !isWorker) throw new ForbiddenException('Not your booking');
+    if (b.paymentMode !== 'ONLINE') throw new BadRequestException('Booking is cash mode');
+
+    const payment = await this.prisma.payment.findFirst({
+      where: { bookingId, providerOrderId: { startsWith: 'upiqr_' } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!payment?.providerOrderId) throw new ConflictException('Generate the UPI QR first');
+    if (payment.status === 'PAID') return { ok: true, idempotent: true };
+
+    return this.applyPayment({
+      providerOrderId: payment.providerOrderId,
+      providerPaymentId: `upi_${Date.now()}`,
+      method: 'UPI',
+      status: 'PAID',
+    });
   }
 
   async handleWebhook(rawBody: Buffer | undefined, signature: string | undefined, body: unknown) {

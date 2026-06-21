@@ -47,4 +47,24 @@ export class PaymentsController {
   async mockPay(@Param('orderId') orderId: string) {
     return ok(await this.payments.mockPay(orderId));
   }
+
+  @Roles('CUSTOMER')
+  @Post('upi/qr')
+  @HttpCode(200)
+  async upiQr(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(createOrderSchema)) dto: CreateOrderDto,
+  ) {
+    return ok(await this.payments.createUpiQr(user, dto.bookingId));
+  }
+
+  // Either the customer or the assigned worker may confirm a UPI transfer.
+  @Post('upi/confirm')
+  @HttpCode(200)
+  async upiConfirm(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(createOrderSchema)) dto: CreateOrderDto,
+  ) {
+    return ok(await this.payments.confirmUpi(user, dto.bookingId));
+  }
 }
