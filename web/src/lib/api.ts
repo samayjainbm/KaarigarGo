@@ -107,6 +107,8 @@ export const Api = {
 
   paymentOrder: (bookingId: string) => api('/payments/order', { method: 'POST', body: { bookingId }, auth: true }),
   mockPay: (orderId: string) => api(`/payments/order/${orderId}/mock-pay`, { method: 'POST' }),
+  upiQr: (bookingId: string) => api('/payments/upi/qr', { method: 'POST', body: { bookingId }, auth: true }),
+  upiConfirm: (bookingId: string) => api('/payments/upi/confirm', { method: 'POST', body: { bookingId }, auth: true }),
   wallet: () => api('/wallet', { auth: true }),
 
   // Admin

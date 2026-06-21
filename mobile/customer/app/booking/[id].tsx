@@ -6,7 +6,7 @@ import { Avatar, Badge, Button, Card, Loading, Screen, StatusBadge } from '@/ui'
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Image, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 const TERMINAL = ['SETTLED', 'REJECTED', 'CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_WORKER', 'EXPIRED'];
 const PAYABLE = ['ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'COMPLETED'];
@@ -16,6 +16,8 @@ export default function BookingDetail() {
   const router = useRouter();
   const [b, setB] = useState<any>(null);
   const [paying, setPaying] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [qr, setQr] = useState<any>(null);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
@@ -54,22 +56,31 @@ export default function BookingDetail() {
   const canPay = b.paymentMode === 'ONLINE' && PAYABLE.includes(b.status) && !paid;
   const canReview = ['COMPLETED', 'SETTLED'].includes(b.status);
 
-  async function pay() {
+  async function startUpi() {
     setPaying(true);
     setMsg(null);
     try {
-      const order = await Api.paymentOrder(id);
-      if (order.data.provider === 'mock') {
-        await Api.mockPay(order.data.orderId);
-        setMsg('Payment successful (dev mock).');
-      } else {
-        setMsg('Order created — complete checkout in Razorpay.');
-      }
-      await load();
+      const r = await Api.upiQr(id);
+      setQr(r.data);
     } catch (e: any) {
-      setMsg(e.message ?? 'Payment failed');
+      setMsg(e.message ?? 'Could not start UPI payment');
     } finally {
       setPaying(false);
+    }
+  }
+
+  async function confirmUpi() {
+    setConfirming(true);
+    setMsg(null);
+    try {
+      await Api.upiConfirm(id);
+      setQr(null);
+      setMsg('Payment confirmed — thank you!');
+      await load();
+    } catch (e: any) {
+      setMsg(e.message ?? 'Could not confirm payment');
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -136,7 +147,18 @@ export default function BookingDetail() {
           <View style={{ marginTop: space(2) }}>
             {paid ? <Badge label={`Paid · ${b.paymentMode === 'CASH' ? 'cash' : 'online'}`} bg={colors.greenBg} fg={colors.green} /> : <Badge label={b.paymentMode === 'CASH' ? 'Pay cash after service' : 'Payment pending'} bg={colors.amberBg} fg={colors.amber} />}
           </View>
-          {canPay && <Button title={`Pay ${rupees(b.finalPrice ?? b.priceEstimate)}`} onPress={pay} loading={paying} style={{ marginTop: space(3) }} />}
+          {canPay && !qr && (
+            <Button title={`Pay ${rupees(b.finalPrice ?? b.priceEstimate)} via UPI`} icon="qr-code" onPress={startUpi} loading={paying} style={{ marginTop: space(3) }} />
+          )}
+          {canPay && qr && (
+            <View style={{ marginTop: space(3), alignItems: 'center', gap: space(2) }}>
+              <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center' }}>Scan with any UPI app (GPay, PhonePe, Paytm) — or tap “Open UPI app”.</Text>
+              <Image source={{ uri: qr.qr }} style={{ width: 220, height: 220, borderRadius: radius.md, backgroundColor: '#fff' }} />
+              <Text style={{ color: colors.ink, fontWeight: '700' }}>{qr.payeeName} · {qr.vpa}</Text>
+              <Button title="Open UPI app" variant="secondary" icon="open-outline" onPress={() => Linking.openURL(qr.upiUri)} style={{ alignSelf: 'stretch' }} />
+              <Button title="I've paid" variant="success" icon="checkmark-circle" loading={confirming} onPress={confirmUpi} style={{ alignSelf: 'stretch' }} />
+            </View>
+          )}
           {msg && <Text style={{ marginTop: space(2), color: colors.text }}>{msg}</Text>}
         </Card>
 

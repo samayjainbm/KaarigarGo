@@ -111,6 +111,7 @@ export const Api = {
 
   paymentOrder: (bookingId: string) => api('/payments/order', { method: 'POST', body: { bookingId }, auth: true }),
   mockPay: (orderId: string) => api(`/payments/order/${orderId}/mock-pay`, { method: 'POST' }),
+  upiConfirm: (bookingId: string) => api('/payments/upi/confirm', { method: 'POST', body: { bookingId }, auth: true }),
   wallet: () => api('/wallet', { auth: true }),
   walletTxns: () => api('/wallet/transactions', { auth: true }),
 

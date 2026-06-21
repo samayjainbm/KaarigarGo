@@ -16,6 +16,8 @@ export default function BookingDetail() {
   const { id } = useParams<{ id: string }>();
   const [b, setB] = useState<any>(null);
   const [paying, setPaying] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [qr, setQr] = useState<any>(null);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
@@ -59,22 +61,31 @@ export default function BookingDetail() {
   const canPay = b.paymentMode === 'ONLINE' && PAYABLE.includes(b.status) && !paid;
   const canReview = ['COMPLETED', 'SETTLED'].includes(b.status);
 
-  async function pay() {
+  async function startUpi() {
     setPaying(true);
     setMsg(null);
     try {
-      const order = await Api.paymentOrder(id);
-      if (order.data.provider === 'mock') {
-        await Api.mockPay(order.data.orderId);
-        setMsg('Payment successful (dev mock).');
-      } else {
-        setMsg('Order created — complete checkout in your Razorpay app.');
-      }
-      await load();
+      const r = await Api.upiQr(id);
+      setQr(r.data);
     } catch (e: any) {
-      setMsg(e.message ?? 'Payment failed');
+      setMsg(e.message ?? 'Could not start UPI payment');
     } finally {
       setPaying(false);
+    }
+  }
+
+  async function confirmUpi() {
+    setConfirming(true);
+    setMsg(null);
+    try {
+      await Api.upiConfirm(id);
+      setQr(null);
+      setMsg('Payment confirmed — thank you!');
+      await load();
+    } catch (e: any) {
+      setMsg(e.message ?? 'Could not confirm payment');
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -202,8 +213,18 @@ export default function BookingDetail() {
                 <Badge tone="amber">{b.paymentMode === 'CASH' ? 'Pay cash after service' : 'Payment pending'}</Badge>
               )}
             </div>
-            {canPay && (
-              <Button className="mt-4 w-full" loading={paying} onClick={pay}>Pay {rupees(b.finalPrice ?? b.priceEstimate)}</Button>
+            {canPay && !qr && (
+              <Button className="mt-4 w-full" loading={paying} onClick={startUpi}>Pay {rupees(b.finalPrice ?? b.priceEstimate)} via UPI</Button>
+            )}
+            {canPay && qr && (
+              <div className="mt-4 flex flex-col items-center gap-3">
+                <p className="text-center text-xs text-slate-500">Scan with any UPI app (GPay, PhonePe, Paytm), or open it directly.</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qr.qr} alt="UPI payment QR code" className="h-52 w-52 rounded-xl border border-slate-200" />
+                <p className="text-sm font-semibold text-slate-800">{qr.payeeName} · {qr.vpa}</p>
+                <a href={qr.upiUri} className="w-full rounded-xl border border-brand-200 bg-brand-50 py-2.5 text-center text-sm font-semibold text-brand-700 transition hover:bg-brand-100">Open UPI app</a>
+                <Button className="w-full" loading={confirming} onClick={confirmUpi}>I&apos;ve paid</Button>
+              </div>
             )}
             {msg && <p className="mt-3 text-sm text-slate-600">{msg}</p>}
           </Card>

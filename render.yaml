@@ -24,3 +24,7 @@ services:
         value: "900"
       - key: JWT_REFRESH_TTL
         value: "2592000"
+      - key: UPI_VPA
+        sync: false # your UPI ID / VPA that receives payments, e.g. yourname@okhdfcbank
+      - key: UPI_PAYEE_NAME
+        value: KaarigarGo

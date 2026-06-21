@@ -102,7 +102,13 @@ export default function JobDetail() {
         return <Button title="Mark job complete" icon="checkmark-circle" variant="success" loading={busy} onPress={() => run(() => Api.jobStatus(id, 'COMPLETED'))} />;
       case 'COMPLETED':
         if (b.paymentMode === 'CASH') return <Button title={`Collect ${rupees(b.finalPrice ?? b.priceEstimate)} cash`} icon="cash" variant="success" loading={busy} onPress={() => run(() => Api.cashConfirm(id))} />;
-        return <Text style={{ color: colors.muted, textAlign: 'center' }}>{paid ? 'Settled automatically.' : 'Waiting for customer payment…'}</Text>;
+        if (paid) return <Text style={{ color: colors.muted, textAlign: 'center' }}>Settled automatically.</Text>;
+        return (
+          <View style={{ gap: space(2) }}>
+            <Button title="Confirm UPI payment received" icon="checkmark-circle" variant="success" loading={busy} onPress={() => run(() => Api.upiConfirm(id))} />
+            <Text style={{ color: colors.muted, textAlign: 'center', fontSize: 12 }}>Tap once the customer&apos;s UPI transfer lands in your account.</Text>
+          </View>
+        );
       default:
         return null;
     }
