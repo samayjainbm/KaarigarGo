@@ -28,3 +28,5 @@ services:
         sync: false # your UPI ID / VPA that receives payments, e.g. yourname@okhdfcbank
       - key: UPI_PAYEE_NAME
         value: KaarigarGo
+      - key: SEED_DEMO_HISTORY
+        value: "false" # set to "true" once to backfill ~2 months of demo activity on the next deploy, then back to "false"

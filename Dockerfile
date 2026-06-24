@@ -25,5 +25,6 @@ COPY package.json ./
 
 EXPOSE 3000
 
-# Apply migrations, then start. (PostGIS extension is created by the init migration.)
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# Apply migrations, optionally backfill ~2 months of demo history, then start.
+# Set SEED_DEMO_HISTORY=true once to populate demo data (idempotent; safe to leave on).
+CMD ["sh", "-c", "npx prisma migrate deploy && if [ \"$SEED_DEMO_HISTORY\" = \"true\" ]; then node prisma/seed-history.js || true; fi && node dist/main.js"]
