@@ -5,8 +5,18 @@ Two React Native + Expo apps that talk to the KaarigarGo API:
 - **`customer/`** — KaarigarGo (book services, track, pay, review, wallet)
 - **`worker/`** — KaarigarGo Pro (jobs feed, accept & progress jobs, earnings, payouts, availability)
 
-Both use **Expo SDK 52 + Expo Router** and share an identical `src/` library
-(`api.ts`, `auth.tsx`, `theme.ts`, `ui.tsx`, `format.ts`).
+Both use **Expo SDK 52 + React Navigation** (native-stack + bottom-tabs) and share an
+identical JavaScript `src/` library (`api.js`, `auth.js`, `theme.js`, `ui.js`, `format.js`).
+
+Each app is structured as:
+
+```
+index.js                       # registerRootComponent(App)
+src/App.js                     # SafeAreaProvider + AuthProvider + NavigationContainer
+src/navigation/stacknavigator.js   # root stack + auth gate
+src/navigation/tabnavigator.js     # bottom tabs
+src/screens/*.js               # one component per screen
+```
 
 ## Run
 
@@ -45,6 +55,7 @@ detail with the full action chain — accept/reject → en route → arrived →
 ## Notes
 
 - Tokens are stored with `expo-secure-store`; the API client auto-refreshes on 401.
-- Type-checked with `npm run typecheck` in each app.
+- Navigation is plain JavaScript: screens are registered in `src/navigation/stacknavigator.js`
+  and receive the `navigation`/`route` props; the auth gate swaps stacks on login/logout.
 - Worker onboarding (creating a brand-new worker profile) uses the seeded pro for the demo;
   a full profile-creation flow is a natural next addition.
