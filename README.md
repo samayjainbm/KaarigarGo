@@ -64,8 +64,6 @@ The API is the single source of truth; every client speaks the same `/api/v1` JS
                                    └────────────┘  └──────────┘
 ```
 
-📖 **Deep dive:** [`docs/KaarigarGo-Developer-Notes.html`](docs/KaarigarGo-Developer-Notes.html) (also as [PDF](docs/KaarigarGo-Developer-Notes.pdf)) — a full, function-by-function developer guide. Backend API reference (endpoint catalog): [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md).
-
 ## Getting started
 
 ### Prerequisites
@@ -188,7 +186,6 @@ KaarigarGo/
 │   ├── customer/      # Expo app — book, track, pay, review, wallet
 │   └── worker/        # Expo app — jobs, earnings, KYC, live location
 ├── web/               # Next.js 15 ops console (admin + customer-style views)
-├── docs/              # Developer guide (HTML/PDF) + backend API reference
 ├── Dockerfile         # production API image (no build step)
 ├── render.yaml        # Render blueprint for the API
 └── docker-compose.yml # local Postgres (PostGIS) + Redis
@@ -225,4 +222,4 @@ The production hardening checklist lives in [`DEPLOY.md`](DEPLOY.md) §6.
 
 ## Credits
 
-Built by **Samay Jain**.
+Built and maintained by **Samay Jain**.
