@@ -1,195 +1,228 @@
-# KaarigarGo — Backend API
+# KaarigarGo
 
-Backend for **KaarigarGo**, a local skilled-labour marketplace (electricians, plumbers,
-cleaners, carpenters, and more) connecting customers with verified service professionals.
+**An on-demand home-services marketplace for India — book a verified local pro (electrician, plumber, cleaner, carpenter…), track them live, and pay by UPI or cash.**
 
-This repository is the **minimal Phase 0 backend**: a single NestJS API with a Prisma
-data model, PostgreSQL + PostGIS, and Redis. Mobile apps (React Native + Expo), the admin
-dashboard, and the public website are planned for later phases.
+![Node](https://img.shields.io/badge/Node-%E2%89%A520-339933?logo=node.js&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%20%2B%20PostGIS-4169E1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
+![Expo](https://img.shields.io/badge/Expo-SDK%2052-000020?logo=expo&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=next.js&logoColor=white)
+![License](https://img.shields.io/badge/license-UNLICENSED-lightgrey)
 
-## Stack
+> A monorepo: **one** Express API serves **two** native mobile apps (customer + worker) and a Next.js ops console. Live API: `https://kaarigargo-api.onrender.com/api/v1` · health: [`/api/v1/health`](https://kaarigargo-api.onrender.com/api/v1/health).
 
-| Layer        | Choice                          |
-| ------------ | ------------------------------- |
-| Language     | TypeScript                      |
-| API          | NestJS 11                       |
-| Database     | PostgreSQL 16 + PostGIS         |
-| ORM          | Prisma 6 (raw SQL for geo)      |
-| Cache / KV   | Redis 7 (via ioredis)           |
-| Validation   | Zod                             |
+---
 
-## Prerequisites
+## Overview
 
-- **Node.js** 20+ (tested on 24)
-- **Docker Desktop** (for local Postgres + Redis) — https://www.docker.com/products/docker-desktop/
-- npm (ships with Node)
+KaarigarGo connects **customers** who need a home service with nearby **workers** ("pros"). A customer books a job; the backend matches the nearest online, KYC-verified pro using PostGIS radius search; the pro moves the job through a strict lifecycle (`accepted → en route → in progress → completed`); payment settles (UPI/cash) with a platform commission credited against the worker's wallet; both sides leave a verified review. **Ops staff** approve KYC, resolve disputes, and manage payouts from a web console.
+
+It's a real two-sided, real-time marketplace with an escrow-style money layer — built deliberately lightweight (a build-free plain-JS API) so it runs on free-tier infra.
+
+## Features
+
+- **Passwordless auth** — phone OTP → JWT access + rotating refresh tokens (Redis-backed revocation).
+- **Geospatial matching** — nearest online + verified pro via PostGIS `ST_DWithin` / `ST_Distance`.
+- **Booking state machine** — 11 states, forward-only worker transitions, full event timeline.
+- **Payments** — UPI QR (zero-gateway), Razorpay (auto-enabled when keyed), idempotent webhooks.
+- **Money system** — configurable commission rules, append-only wallet ledger, worker payouts.
+- **Real-time** — Socket.IO rooms for live status, location tracking, and in-booking chat.
+- **Notifications** — in-app + Expo push fan-out.
+- **Trust & safety** — worker KYC, verified reviews, disputes, reliability scoring, SOS.
+- **Growth** — referral codes with two-sided wallet rewards.
+- **Admin** — analytics, user/worker/booking management, KYC & dispute queues, audit logs.
+
+## Tech stack
+
+| Area | Stack |
+| --- | --- |
+| **Backend** | Node ≥ 20, Express 5, plain JavaScript (no build step), Zod 3, `jsonwebtoken` 9, `qrcode` |
+| **Data** | PostgreSQL 16 + PostGIS 3.4, Prisma 6 (raw SQL for geography columns), Redis 7 (`ioredis`) |
+| **Realtime** | Socket.IO 4.8 |
+| **Mobile** | React Native 0.76 / Expo SDK 52, React Navigation 7, `expo-secure-store`, `expo-notifications`, `expo-location` |
+| **Web** | Next.js 15 (App Router), React 19, Tailwind 3.4, `lucide-react`, `socket.io-client` |
+| **Infra** | Docker (`node:22-alpine`), Render (API), Vercel (web), EAS (mobile), Supabase/Neon (Postgres), Upstash (Redis) |
+
+## Architecture
+
+The API is the single source of truth; every client speaks the same `/api/v1` JSON envelope (`{ data, error, meta }`) and the same Socket.IO gateway. The backend is organized as one router/service/schema module per domain.
+
+```
+ mobile/customer ─┐
+ mobile/worker   ─┤   HTTPS + WSS    ┌──────────────────────────────┐
+ web (ops)       ─┴───────────────► │  KaarigarGo API (Express 5)  │
+                                    │  auth · bookings · payments  │      ┌─ Socket.IO ─┐
+                                    │  money · workers · kyc ·     │◀────▶│ user:<id>   │
+                                    │  reviews · disputes · admin  │      │ booking:<id>│
+                                    └───────┬───────────┬──────────┘      └─────────────┘
+                                            │           │
+                                   ┌────────▼───┐  ┌────▼─────┐
+                                   │ PostgreSQL │  │  Redis   │
+                                   │ + PostGIS  │  │ OTP, jti │
+                                   └────────────┘  └──────────┘
+```
+
+📖 **Deep dive:** [`docs/KaarigarGo-Developer-Notes.html`](docs/KaarigarGo-Developer-Notes.html) (also as [PDF](docs/KaarigarGo-Developer-Notes.pdf)) — a full, function-by-function developer guide. Backend API reference (endpoint catalog): [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md).
 
 ## Getting started
 
+### Prerequisites
+
+- **Node.js ≥ 20** (the API Docker image uses Node 22) — runs the API, web, and Expo tooling.
+- **Docker Desktop** — the easiest way to run local PostgreSQL + PostGIS and Redis (`docker-compose.yml`).
+- **A phone with Expo Go** or an Android emulator — to run the mobile apps. (For native release builds: **JDK 17** + Android SDK.)
+
+### 1. Backend API
+
 ```bash
-# 1. Install dependencies (also generates the Prisma client)
+# from the repo root
+docker compose up -d            # PostgreSQL (+PostGIS) on :5432 and Redis on :6379
+cp .env.example .env            # then set JWT_ACCESS_SECRET / JWT_REFRESH_SECRET (see table below)
+
 npm install
+npm run prisma:generate         # generate the Prisma client
+npm run prisma:migrate          # apply migrations to the local DB
+npm run db:seed                 # seed catalog + demo accounts (categories, services, users)
 
-# 2. Start Postgres + PostGIS and Redis
-docker compose up -d
-
-# 3. Create the database schema
-npm run prisma:migrate          # first run will prompt for a migration name, e.g. "init"
-
-# 4. Seed catalog + sample users
-npm run db:seed
-
-# 5. Run the API (watch mode)
-npm run start:dev
+npm run dev                     # API on http://localhost:3000/api/v1  (node --watch)
 ```
 
-The API listens on `http://localhost:3000/api/v1`.
+Check it: `curl http://localhost:3000/api/v1/health` → `{ "data": { "status": "healthy", ... } }`.
 
-- `GET /api/v1`         → service banner
-- `GET /api/v1/health`  → liveness + DB/Redis checks
+<details>
+<summary>All backend scripts (from <code>package.json</code>)</summary>
 
-## Environment
+| Script | Does |
+| --- | --- |
+| `npm run dev` | Start the API with file-watch (`node --watch server/server.js`) |
+| `npm start` | Start the API |
+| `npm run prisma:generate` | Generate the Prisma client |
+| `npm run prisma:migrate` | `prisma migrate dev` (local) |
+| `npm run prisma:deploy` | `prisma migrate deploy` (prod/CI) |
+| `npm run prisma:studio` | Open Prisma Studio |
+| `npm run db:seed` | Seed catalog + demo accounts (`ts-node prisma/seed.ts`) |
+| `npm run db:seed:history` | Backfill ~2 months of demo activity |
+| `npm run db:reset` | Reset the database |
+</details>
 
-Local defaults live in `.env` (already matches `docker-compose.yml`). See `.env.example`
-for the full list of integration secrets (Maps, payments, notifications, etc.) to fill in
-as later phases land.
+### 2. Mobile apps (Expo)
 
-## Data model
-
-The full schema lives in [`prisma/schema.prisma`](prisma/schema.prisma) and is the single
-source of truth: users, worker profiles & skills, catalog (categories/services), bookings
-and their event timeline, quotes, payments, wallets & ledger, payouts, reviews, disputes,
-notifications, chat, referrals, commission rules, audit logs, and devices.
-
-Notes:
-- **Money** is stored in integer **paise** (minor units). Never use floats for currency.
-- **Geospatial** columns (`worker_profiles.base_location`, `bookings.location`,
-  `addresses.location`) use PostGIS `geography(Point, 4326)`. Prisma can't query these
-  directly — use `$queryRaw` / `$executeRaw`. GiST indexes are created by the seed script.
-
-## API endpoints
-
-All responses use the `{ data, error, meta }` envelope. Protected routes need an
-`Authorization: Bearer <accessToken>` header.
-
-**Auth (public)**
-- `POST /auth/otp/request` — `{ phone, role? }` → sends an OTP. In non-production the
-  response includes `devOtp` so you can test without an SMS provider.
-- `POST /auth/otp/verify` — `{ phone, code, role? }` → creates the user on first login and
-  returns `{ user, accessToken, refreshToken }`.
-- `POST /auth/refresh` — `{ refreshToken }` → rotates and returns a new token pair.
-- `POST /auth/logout` — `{ refreshToken, allDevices? }` → revokes refresh token(s).
-
-**Account (auth required)**
-- `GET /me` — current user (includes worker profile summary if any).
-- `PATCH /me` — update `name`, `email`, `avatarUrl`, `locale`.
-- `POST /me/devices` — `{ fcmToken, platform }` → register a device for push.
-
-**Worker (role: WORKER)**
-- `POST /worker/profile` — create profile (`bio`, `yearsExperience`, `serviceRadiusKm`, `lat`, `lng`).
-- `PATCH /worker/profile` — update profile + `availabilityStatus`; `lat`/`lng` set the PostGIS base location.
-
-### Quick auth test
+Two separate apps share an identical `src/` library; run whichever you need. They default to the live Render API via `app.json → extra.apiUrl`, so they work even without a local backend.
 
 ```bash
-# 1) request an OTP (dev returns the code)
-curl -s -X POST localhost:3000/api/v1/auth/otp/request \
-  -H 'Content-Type: application/json' -d '{"phone":"+918888800001","role":"CUSTOMER"}'
-
-# 2) verify it (use the devOtp from step 1) → returns accessToken
-curl -s -X POST localhost:3000/api/v1/auth/otp/verify \
-  -H 'Content-Type: application/json' -d '{"phone":"+918888800001","code":"<devOtp>"}'
-
-# 3) call a protected route
-curl -s localhost:3000/api/v1/me -H 'Authorization: Bearer <accessToken>'
+cd mobile/customer          # or:  cd mobile/worker
+npm install
+npx expo start              # press 'a' (Android), 'i' (iOS), or scan the QR with Expo Go
 ```
 
-Security notes: OTPs are stored **hashed** in Redis with a 5-min TTL, 5-attempt cap, a 30s
-resend cooldown, and an hourly request cap per number. Refresh tokens are rotating and
-individually revocable (their ids live in Redis). Swap `DevSmsService` for MSG91/Twilio in
-`AuthModule` when wiring real SMS (complete India DLT template registration first).
+**Demo logins** — the dev OTP is shown on-screen (no SMS provider needed):
 
-### Catalog & discovery (Phase 2)
-- `GET /categories`, `GET /categories/:slug`, `GET /services?categoryId=` — public
-- `GET /workers/search?lat=&lng=&categoryId=&limit=` — PostGIS ranked (distance → rating → reliability), public
-- `GET /workers/:id` — public profile with reviews
-- `GET/POST/DELETE /worker/skills` — worker manages their skills (role WORKER)
+| App | Phone | Seeded as |
+| --- | --- | --- |
+| Customer app | `+919000000002` | Asha (CUSTOMER) |
+| Worker app | `+919000000003` | Ravi (WORKER) |
+| Web ops console | `+919000000001` | SUPER_ADMIN |
 
-### Bookings, chat & realtime (Phase 3)
-- `POST /bookings` — instant or scheduled; auto-assigns nearest available worker (or pass `workerId`)
-- `GET /bookings`, `GET /bookings/:id` (with event timeline)
-- `POST /bookings/:id/accept | reject | status | cancel` — lifecycle (status: EN_ROUTE → IN_PROGRESS → COMPLETED)
-- `POST /bookings/:id/quote` + `POST /bookings/:id/quote/accept` — quote flow
-- `POST /bookings/:id/track` — worker location ping (EN_ROUTE)
-- `GET/POST /bookings/:id/messages` — chat
-- **WebSocket** (Socket.IO, JWT handshake): `booking.join`, `chat.send`, `chat.markRead`, `location.ping`; server emits `booking.status_changed`, `chat.message`, `booking.location_update`, `payment.updated`, `dispute.updated`, `kyc.updated`, `safety.sos`
+> Pointing the apps at a **local** API? `localhost` on a phone is the phone itself. Set `app.json → extra.apiUrl` to your machine's LAN IP (`http://192.168.x.x:3000/api/v1`) or `http://10.0.2.2:3000/api/v1` for the Android emulator. See [`mobile/README.md`](mobile/README.md) for details.
 
-### Payments, wallet, payouts (Phase 4)
-- `POST /payments/order` — create provider order (Razorpay when keys set, else dev **mock**)
-- `POST /payments/webhook` — signature-verified provider webhook
-- `POST /payments/order/:orderId/mock-pay` — dev-only payment trigger
-- `POST /bookings/:id/cash/confirm` — cash settlement
-- `GET /wallet`, `GET /wallet/transactions` — ledger
-- `GET /worker/earnings`, `GET /worker/payouts`, `POST /worker/payouts/request`
+<details>
+<summary>Native release APK (local build, Windows)</summary>
 
-### Trust & quality (Phase 5)
-- `POST /worker/kyc`, `GET /worker/kyc` — submit/list KYC doc refs (worker must pass KYC to go online)
-- `POST /bookings/:id/review`, `GET /workers/:id/reviews` — verified reviews; recompute worker rating
-- `POST /bookings/:id/dispute`, `GET /disputes/:id` — disputes
-- `POST /bookings/:id/sos` — in-job safety alert
+Each app is a prebuilt Expo project. To build an installable release APK locally:
 
-### Admin (Phase 6, role OPS_ADMIN / SUPER_ADMIN)
-- `GET /admin/analytics/overview` — GMV, revenue, bookings by status, workers, disputes
-- `GET /admin/users`, `POST /admin/users/:id/suspend | reinstate`, `POST /admin/users/:id/role` (SUPER_ADMIN)
-- `GET /admin/workers`, `POST /admin/workers/:id/feature`
-- `GET /admin/bookings` — live monitor with filters
-- `GET /admin/kyc`, `POST /admin/kyc/:id/approve | reject`
-- `GET /admin/disputes`, `POST /admin/disputes/:id/assign | resolve` (refund/credit to wallet)
-- `POST/PATCH/DELETE /admin/catalog/categories|services` — catalog CRUD
-- `GET/POST /admin/commission-rules`
-- `GET /admin/payouts`, `POST /admin/payouts/:id/approve | mark-paid | retry`
-- `GET /admin/audit-logs` — every mutating admin action is audited
+```bash
+cd mobile/customer/android       # or mobile/worker/android
+./gradlew assembleRelease        # output: app/build/outputs/apk/release/app-release.apk
+```
 
-### Referrals (Phase 8)
-- `GET /referrals/me` — your reusable code
-- `POST /referrals/apply` — apply a code; credits both parties
+Requires **JDK 17** + Android SDK. The icon font (`ionicons.ttf`) is embedded under `android/app/src/main/assets/fonts/` (lowercase — Android asset lookup is case-sensitive) and `android/build.gradle` pins Kotlin `1.9.25`. Or build in the cloud with EAS (see [Deployment](#deployment)).
+</details>
 
-## Useful scripts
+### 3. Web ops console (Next.js)
 
-| Script                   | What it does                              |
-| ------------------------ | ----------------------------------------- |
-| `npm run start:dev`      | API in watch mode                         |
-| `npm run build`          | Compile to `dist/`                        |
-| `npm run prisma:migrate` | Create/apply a dev migration              |
-| `npm run prisma:studio`  | Open Prisma Studio                        |
-| `npm run db:seed`        | Seed catalog + sample users               |
-| `npm run db:reset`       | Drop, re-migrate, and re-seed the DB      |
+```bash
+cd web
+npm install
+echo "NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1" > .env.local
+npm run dev                 # web on http://localhost:3001
+```
 
-## Sample seeded accounts
+## Environment variables
 
-| Role        | Phone           |
-| ----------- | --------------- |
-| Super admin | `+919000000001` |
-| Customer    | `+919000000002` |
-| Worker      | `+919000000003` |
+Copy [`.env.example`](.env.example) → `.env`. Only the core block is required for local dev; the rest enable production integrations.
 
-## Roadmap
+| Variable | Required | Description |
+| --- | --- | --- |
+| `NODE_ENV` | no | `development` (default) / `production` |
+| `PORT` | no | API port (default `3000`) |
+| `DATABASE_URL` | **yes** | PostgreSQL + PostGIS connection string |
+| `REDIS_URL` | no* | Redis URL (default `redis://localhost:6379`) — needed in practice for OTP / refresh / live tracking |
+| `JWT_ACCESS_SECRET` | **yes (prod)** | Signs short-lived access tokens (unsafe dev default if unset) |
+| `JWT_REFRESH_SECRET` | **yes (prod)** | Signs rotating refresh tokens (unsafe dev default if unset) |
+| `JWT_ACCESS_TTL` | no | Access token lifetime, seconds (default `900`) |
+| `JWT_REFRESH_TTL` | no | Refresh token lifetime, seconds (default `2592000`) |
+| `RAZORPAY_KEY_ID` / `_SECRET` / `_WEBHOOK_SECRET` | no | When set, the payment provider auto-switches mock → Razorpay |
+| `UPI_VPA` / `UPI_PAYEE_NAME` | no | UPI VPA + display name baked into the UPI-QR deep link |
+| `GOOGLE_MAPS_API_KEY_*` | no | Maps keys (server / Android / iOS) |
+| `FIREBASE_*`, `SMS_PROVIDER_KEY`, `WHATSAPP_API_KEY` | no | Notification / SMS providers (Expo push works without these) |
+| `CLOUDINARY_*` | no | Media uploads |
+| `SENTRY_DSN`, `POSTHOG_KEY` | no | Observability |
 
-Built per the LabourLink/KaarigarGo master spec, phase by phase:
+> **Never commit `.env`.** The `JWT_*` secrets fall back to `dev_*_change_me` defaults if unset — fine locally, unsafe in production.
 
-- **Phase 0 — Foundations** ✅
-- **Phase 1 — Auth & profiles** (phone OTP, JWT access/refresh, RBAC, `/me`, devices, worker profile) ✅
-- **Phase 2 — Catalog & geo discovery** (catalog reads, PostGIS worker search, public profile, skills) ✅
-- **Phase 3 — Booking core + realtime + chat** (lifecycle, Socket.IO gateway, quotes, live tracking) ✅
-- **Phase 4 — Payments, wallet, payouts** (escrow settlement, commission engine, cash mode, ledger) ✅
-- **Phase 5 — Trust & quality** (KYC + approval, reviews, disputes, SOS, reliability score) ✅
-- **Phase 6 — Admin & analytics** (overview, user/worker mgmt, catalog CRUD, commission rules, payouts, audit log) ✅
-- **Phase 8 — Growth** (referrals with wallet credits; recurring fields in schema) ✅ _partial_
-- Phase 7 — Public website (Next.js) — _frontend, separate from this backend_
+## Project structure
 
-### Deferred / noted for later
+```
+KaarigarGo/
+├── server/            # Express 5 API — one folder per domain (router + service + schemas)
+│   ├── auth/  bookings/  payments/  money/  workers/  kyc/  reviews/
+│   ├── disputes/  referrals/  chat/  notifications/  realtime/  admin/
+│   ├── config/        # env (zod), prisma client, redis client
+│   ├── lib/           # response envelope, asyncHandler, zod validate
+│   ├── middleware/    # requireAuth / requireRoles, error handler
+│   └── server.js      # HTTP + Socket.IO bootstrap
+├── prisma/            # schema.prisma (PostGIS), migrations, seeds
+├── mobile/
+│   ├── customer/      # Expo app — book, track, pay, review, wallet
+│   └── worker/        # Expo app — jobs, earnings, KYC, live location
+├── web/               # Next.js 15 ops console (admin + customer-style views)
+├── docs/              # Developer guide (HTML/PDF) + backend API reference
+├── Dockerfile         # production API image (no build step)
+├── render.yaml        # Render blueprint for the API
+└── docker-compose.yml # local Postgres (PostGIS) + Redis
+```
 
-Background jobs (BullMQ) for async settlement & payout processing; Razorpay Route split
-settlement; Socket.IO Redis adapter for multi-instance scale; recurring-booking scheduler;
-WhatsApp channel; surge pricing; AI features; and the client apps (customer + worker mobile,
-admin + public web). Settlement currently runs inline on completion; payouts are admin-driven.
+## Deployment
+
+| Piece | Where | Config |
+| --- | --- | --- |
+| **API** | Render (Docker) | [`render.yaml`](render.yaml) + [`Dockerfile`](Dockerfile) — runs `prisma migrate deploy` on boot; health check `/api/v1/health` |
+| **Database** | Supabase / Neon (Postgres + PostGIS) | `DATABASE_URL` (`sync: false` in Render) |
+| **Redis** | Upstash (TLS `rediss://`) | `REDIS_URL` (`sync: false` in Render) |
+| **Web** | Vercel (root dir `web/`) | [`web/vercel.json`](web/vercel.json) — set `NEXT_PUBLIC_API_URL` |
+| **Mobile** | Expo EAS → Play / App stores | [`mobile/*/eas.json`](mobile/customer/eas.json) — `preview` (APK) / `production` profiles |
+
+Full step-by-step: [`DEPLOY.md`](DEPLOY.md).
+
+> **Note:** the Render free tier sleeps after ~15 min idle, so the first request after idle can take 30–60 s (cold start) — the clients tolerate this.
+
+## Status & honest scope
+
+This is a feature-complete demo with deliberate, documented shortcuts so it runs at zero cost:
+
+- **OTP** is returned in the API response (`devOtp`) so you can log in without an SMS provider — replace the dev SMS sender and drop `devOtp` before real users.
+- **Payments** default to a mock / UPI-QR flow that trusts a manual "I've paid" confirmation; set `RAZORPAY_*` for a real gateway.
+- **CORS** is open (`origin: '*'`) — tighten for production.
+- Real-time uses **in-memory** Socket.IO rooms — add the Redis adapter before running more than one API instance.
+
+The production hardening checklist lives in [`DEPLOY.md`](DEPLOY.md) §6.
+
+## License
+
+**Proprietary — UNLICENSED.** This repository is private (`"private": true`, `"license": "UNLICENSED"` in `package.json`); no usage rights are granted. © Samay Jain.
+
+## Credits
+
+Built by **Samay Jain**.
