@@ -17,7 +17,7 @@ prisma/*.db
 *.log
 npm-debug.log*
 
-# Editor / OS / tooling
+# Editor / OS
 .DS_Store
 .idea/
 .vscode/
